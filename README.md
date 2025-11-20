@@ -2,7 +2,7 @@
 
 ## Overview
 The **Storybook AI Generator** is an interactive web application built with **Streamlit** and **Google Gemini AI**. It allows users to generate complete, fully illustrated storybooks from a simple title and genre. The tool uses advanced Large Language Models (LLMs) to write the story and character descriptions, and state-of-the-art image generation models to create consistent illustrations for every page.
-![Alt text](assets/1.jpg)
+<img src="assets/1.jpg" width="400">
 ![Alt text](assets/2.jpg)
 ![Alt text](assets/3.jpg)
 ![Alt text](assets/4.jpg)
