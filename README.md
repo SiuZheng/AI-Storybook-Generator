@@ -41,7 +41,7 @@ The **Storybook AI Generator** is an interactive web application built with **St
 
 ### Prerequisites
 - Python 3.8 or higher
-- A Google Cloud Project with the **Gemini API** enabled.
+- A Google Cloud Project with the **Gemini API** enabled and billing enbled (for batch api).
 - An API Key for Google GenAI.
 
 ### Installation
