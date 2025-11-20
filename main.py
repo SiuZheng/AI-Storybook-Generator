@@ -42,8 +42,7 @@ def update_character_traits(i):
 
 CHAR_DIR = "characters"
 os.makedirs(CHAR_DIR, exist_ok=True)
-st.set_page_config(page_title="AI Storybook Page", layout="wide") # Changed to wide for better layout
-st.title("📖 AI Storybook Generator")
+st.set_page_config(page_title="AI Storybook Page", layout="wide") 
 
 if "character_version" not in st.session_state:
     st.session_state.character_version = 0
@@ -54,19 +53,15 @@ if "story_data" not in st.session_state:
 if "img_paths" not in st.session_state:
     st.session_state.img_paths = []
 
-# --------------------------
-#     SIDEBAR: CONFIGURATION
-# --------------------------
 with st.sidebar:
     api_key = st.text_input("Enter your API Key:", type="password")
     if api_key:
         st.session_state["GOOGLE_API_KEY"] = api_key
-        os.environ["GOOGLE_API_KEY"] = api_key  # Set temporarily for current session
+        os.environ["GOOGLE_API_KEY"] = api_key 
         st.success("API Key successfully loaded for this session!")
 
     st.header("🛠 Story Configuration")
 
-    # --- Story inputs ---
     with st.expander("📌 Story Information", expanded=True):
         title = st.text_input("Story Title", placeholder="The Lost Puppy")
 
@@ -105,13 +100,11 @@ with st.sidebar:
             "Number of Pages", 
             min_value=1, 
             max_value=100, 
-            value=10,  # default
+            value=10,  
             step=1
         )
 
-# --------------------------
-#     MAIN AREA: TABS
-# --------------------------
+
 tab1, tab2 = st.tabs(["✍️ Create Story", "📖 Read Storybook"])
 
 with tab1:
@@ -121,7 +114,7 @@ with tab1:
             try:
                 storybook = generate_story_prompt(title, genre, tone, art_style, num_pages, age)
                 st.session_state.generated_story = storybook.get("story", "")
-                st.session_state.generated_characters = storybook.get("character", [])[:5]  # max 5 characters
+                st.session_state.generated_characters = storybook.get("character", [])[:5]
                 st.session_state.character_data = []
                 for char in st.session_state.generated_characters:
                     st.session_state.character_data.append({
@@ -137,31 +130,29 @@ with tab1:
                 st.session_state.generated_story = ""
                 st.session_state.generated_characters = []
 
-    # Display / Edit Generated Story
+
     st.subheader("📝 Generated Story (Editable)")
     st.text_area(
         "Edit the story here:",
-        key="generated_story",  # binds to session_state directly
+        key="generated_story", 
         height=300
     )
 
     st.divider()
     st.header("2. Character Setup")
-    
-    # Number of characters (optional)
+
     num_characters = st.number_input("Number of Main Characters (optional)", min_value=0, max_value=5, value=st.session_state.get("num_characters", 0), step=1)
 
     for i in range(num_characters):
         existing = st.session_state.character_data[i] if i < len(st.session_state.character_data) else {}
         with st.expander(f"Character {i+1}", expanded=False):
-            # Pre-fill from session state if exists
             while len(st.session_state.character_data) <= i:
                 st.session_state.character_data.append({"name": "", "traits": "", "image": None})
             
             char_name = st.text_input(f"Character {i+1} Name", value=existing.get("name", ""), key=f"name_{i}_{st.session_state.character_version}",on_change=update_character_name,args=[i])
             char_traits = st.text_area(f"Character {i+1} Traits / Description", value=existing.get("traits", ""), key=f"traits_{i}_{st.session_state.character_version}",on_change=update_character_traits,args=[i])
             char_image_upload = st.file_uploader(f"Upload Character {i+1} Image (optional)", type=["png","jpg"], key=f"image_{i}",on_change=handle_file_upload,args=[i,CHAR_DIR])
-            # Button to generate image via Nanobanana  
+
             if st.button(f"Generate Character {i+1} Image via Nanobanana", key=f"generate_{i}"):
                 if not char_name and not char_traits:
                     st.warning("Please enter a name or traits to generate the character image.")
@@ -193,7 +184,6 @@ with tab1:
             if st.session_state.character_data[i]["image"]:
                 st.image(st.session_state.character_data[i]["image"], caption=f"{char_name if char_name else 'Generated Character'} Image", width=300)
 
-    # Button to clear all characters
     if st.button("Clear All Characters"):
         st.session_state.character_data = []
         st.session_state.generated_characters = []
@@ -220,7 +210,6 @@ with tab1:
                 st.warning("Please complete ALL character fields (name, traits, and image).")
                 st.stop()
 
-        # Generate story text
         with st.spinner("🧠 Generating image prompt..."):
             st.session_state.story_data = generate_page_prompt(
                             title, 
@@ -233,7 +222,6 @@ with tab1:
                             st.session_state.generated_story
                         )
 
-        # Generate images
         with st.spinner("🎨 Generating illustrations..."):
             image_prompts = [page["image_prompt"] for page in st.session_state.story_data["page"]]
             st.session_state.img_paths = generate_image_nanobanana(image_prompts, characters=st.session_state.character_data,ratio=ratio)
@@ -270,35 +258,26 @@ with tab2:
         st.divider()
 
         st.header("📚 Story Output")
-
-        # Ensure we have enough image paths (handle potential mismatches if generation failed partially)
-        # In a real app, you'd want more robust error handling here.
         
         for i, page in enumerate(st.session_state.story_data["page"], start=1):
             st.subheader(f"Page {i}")
 
-            # Create two columns: left for image, right for text
-            col1, col2 = st.columns([1, 1])  # equal width, adjust ratio if needed
+            col1, col2 = st.columns([1, 1])
 
-            # Left column: image
             with col1:
                 if i-1 < len(st.session_state.img_paths):
                     st.image(st.session_state.img_paths[i-1], caption=f"Page {i} Illustration", width=400)
                 else:
                     st.warning("Image not available.")
 
-            # Right column: text
             with col2:
                 st.write(page["text"])
                 
-                # Editable Image Prompt
                 new_prompt = st.text_area(f"Image Prompt for Page {i}", value=page['image_prompt'], key=f"prompt_{i}_{st.session_state.character_version}")
                 
-                # Update prompt in session state if changed
                 if new_prompt != page['image_prompt']:
                     st.session_state.story_data["page"][i-1]["image_prompt"] = new_prompt
                 
-                # Re-generate Button
                 if st.button(f"🔄 Re-generate Image {i}", key=f"regen_{i}"):
                     with st.spinner(f"Regenerating image for Page {i}..."):
                         
@@ -308,17 +287,14 @@ with tab2:
                             ratio=ratio
                         )
                         if new_img_path:
-                            # Update the image path in session state
                             if i-1 < len(st.session_state.img_paths):
                                 st.session_state.img_paths[i-1] = new_img_path
                             else:
-                                # If for some reason the list was shorter, append (though index logic should hold)
                                 st.session_state.img_paths.append(new_img_path)
                             st.rerun()
                         else:
                             st.error("Failed to regenerate image.")
 
-                # Re-generate with Original Image Button
                 if st.button(f"🔄 Re-generate with Original Image {i}", key=f"regen_img_{i}"):
                     with st.spinner(f"Regenerating image for Page {i} using original image..."):
                         from utils.image_utils import regenerate_image_with_image_nanobanana
@@ -331,7 +307,6 @@ with tab2:
                             ratio=ratio
                         )
                         if new_img_path:
-                            # Update the image path in session state
                             if i-1 < len(st.session_state.img_paths):
                                 st.session_state.img_paths[i-1] = new_img_path
                             else:

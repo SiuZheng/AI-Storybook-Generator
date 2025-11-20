@@ -29,10 +29,8 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
         characters_uriandmime.append({"uri":char_file.uri,"mime_type":char_file.mime_type})
 
     for prompt in image_prompts:
-            # Base content: the text prompt
             contents_list = []
 
-            # Append character images if any
             if characters:
                 desc_text = "Character descriptions to maintain consistency:\n"
                 
@@ -42,8 +40,6 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
                     if char.get("name") or char.get("traits"):
                         desc_text += f"Character: {char.get('name', '')}\nTraits: {char.get('traits', '')}\n\n"     
 
-                    # If it's a file uploaded by Streamlit, read it to bytes and upload
-
                     contents_list.append({
                             "file_data": {"file_uri": characters_uriandmime[i]["uri"], "mime_type": characters_uriandmime[i]["mime_type"]}
                         })
@@ -52,7 +48,6 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
                     prompt +=f" \n{desc_text}"
             prompt+= "No wording in the image. "       
             contents_list.append({"text": prompt})
-            # Construct the inline request
             inline_requests.append({
                 "contents": [
                     {
@@ -82,12 +77,10 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
     print(f"Job finished with state: {batch_job_inline.state.name}")
     if batch_job_inline.state.name == 'JOB_STATE_SUCCEEDED':
         img_path=[]
-# print the response
     for i, inline_response in enumerate(batch_job_inline.dest.inlined_responses, start=1):
         print(f"\n--- Response {i} ---")
         unique_filename = f"output_{i} {uuid.uuid4().hex}.png"
         output_path = os.path.join("images", unique_filename)
-        # Check for a successful response
         if inline_response.response:
             for part in inline_response.response.candidates[0].content.parts:
                 if part.text is not None:
@@ -140,14 +133,11 @@ def regenerate_image_nanobanana(prompt, characters=None, ratio="1:1"):
     client = genai.Client()
     parts = []
     
-    # Handle characters similar to batch generation
     if characters:
         desc_text = "Character descriptions to maintain consistency:\n"
         for char in characters:
             if char.get("name") or char.get("traits"):
                 desc_text += f"Character: {char.get('name', '')}\nTraits: {char.get('traits', '')}\n\n"
-            
-            # Upload character image if exists
             char_image = char.get("image")
             if char_image:
                 char_file = client.files.upload(file=char_image)
@@ -194,7 +184,6 @@ def regenerate_image_with_image_nanobanana(prompt, original_image_path, characte
     client = genai.Client()
     parts = []
     
-    # 1. Add the original image as the first part of the context
     if original_image_path and os.path.exists(original_image_path):
         original_file = client.files.upload(file=original_image_path)
         parts.append(types.Part(
@@ -205,14 +194,12 @@ def regenerate_image_with_image_nanobanana(prompt, original_image_path, characte
         ))
         parts.append(types.Part(text="Edit the picture based on this picture"))
     
-    # 2. Handle characters
     if characters:
         desc_text = "Character descriptions to maintain consistency:\n"
         for char in characters:
             if char.get("name") or char.get("traits"):
                 desc_text += f"Character: {char.get('name', '')}\nTraits: {char.get('traits', '')}\n\n"
             
-            # Upload character image if exists
             char_image = char.get("image")
             if char_image:
                 char_file = client.files.upload(file=char_image)
@@ -271,7 +258,6 @@ def regenerate_character_with_image_nanobanana(character_description, original_i
 
     parts = []
     
-    # 1. Add the original image
     try:
         if os.path.exists(original_image_path):
             image = Image.open(original_image_path)
@@ -284,7 +270,6 @@ def regenerate_character_with_image_nanobanana(character_description, original_i
         print(f"Error loading original image: {e}")
         return None
 
-    # 2. Add the text prompt
     parts.append(types.Part(text=prompt))
 
     response = client.models.generate_content(
