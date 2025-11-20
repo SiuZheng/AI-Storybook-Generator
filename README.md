@@ -51,7 +51,10 @@ The **Storybook AI Generator** is an interactive web application built with **St
     ```bash
     pip install -r requirements.txt
     ```
-
+2.  **Run Streamlit**:
+    ```bash
+    streamlit run main.py
+    ```
 ## 🚀 How to Use
 
 ### Step 1: Configuration (Sidebar)
