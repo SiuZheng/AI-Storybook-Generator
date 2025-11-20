@@ -42,16 +42,8 @@ The **Storybook AI Generator** is an interactive web application built with **St
 1.  **Clone the repository** (if applicable) or download the source code.
 2.  **Install dependencies**:
     ```bash
-    pip install streamlit google-genai python-dotenv Pillow
+    pip install -r requirements.txt
     ```
-3.  **Environment Setup**:
-    -   Create a `.env` file in the root directory.
-    -   Add your Google API key:
-        ```
-        GOOGLE_API_KEY=your_api_key_here
-        ```
-
----
 
 ## 🚀 How to Use
 
