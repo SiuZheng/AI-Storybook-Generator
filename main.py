@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.llm_utils import generate_page_prompt,generate_story_prompt
-from utils.image_utils import generate_image_nanobanana,generate_character_nanobanana,regenerate_image_nanobanana,regenerate_character_with_image_nanobanana
+from utils.image_utils import generate_image_nanobanana,generate_character_nanobanana,regenerate_image_nanobanana,regenerate_character_with_image_nanobanana,regenerate_image_with_image_nanobanana
 import uuid
 import os
 from PIL import Image
@@ -16,6 +16,8 @@ if "character_data" not in st.session_state:
     st.session_state.character_data = []
 if "generated_characters" not in st.session_state:
     st.session_state.generated_characters = []
+if "generated_image_error" not in st.session_state:
+    st.session_state.generated_image_error = []
 def handle_file_upload(i,CHAR_DIR):
     uploaded_file = st.session_state.get(f"image_{i}")
     if uploaded_file is not None:
@@ -110,6 +112,9 @@ tab1, tab2 = st.tabs(["✍️ Create Story", "📖 Read Storybook"])
 with tab1:
     st.header("1. Generate Story Text")
     if st.button("✨ Generate Story", key="generate_story_button"):
+        if not api_key:
+            st.warning("Please enter api key.")
+            st.stop()
         with st.spinner("Generating story..."):
             try:
                 storybook = generate_story_prompt(title, genre, tone, art_style, num_pages, age)
@@ -122,7 +127,6 @@ with tab1:
                         "traits": char.get("trait", ""),
                         "image": None
                     })
-
                 st.session_state.num_characters = len(st.session_state.generated_characters)
                 st.session_state.character_version += 1
             except Exception as e:
@@ -154,20 +158,26 @@ with tab1:
             char_image_upload = st.file_uploader(f"Upload Character {i+1} Image (optional)", type=["png","jpg"], key=f"image_{i}",on_change=handle_file_upload,args=[i,CHAR_DIR])
 
             if st.button(f"Generate Character {i+1} Image via Nanobanana", key=f"generate_{i}"):
+                if not api_key:
+                    st.warning("Please enter api key.")
+                    st.stop()
                 if not char_name and not char_traits:
                     st.warning("Please enter a name or traits to generate the character image.")
+                    
                 else:
                     with st.spinner(f"Generating image for Character {i+1}..."):
-                        char_image_path = generate_character_nanobanana([f"{char_name}, {char_traits}"], genre,tone,art_style,i,ratio=ratio)
-                        st.session_state.character_data[i]["image"] = char_image_path
-
+                        char_image_path,error= generate_character_nanobanana([f"{char_name}, {char_traits}"], genre,tone,art_style,i,ratio=ratio)
+                        if char_image_path:
+                            st.session_state.character_data[i]["image"] = char_image_path
+                        else:
+                            st.error(f"Failed to generate image. {error}")
             # Button to regenerate character with original image
             if st.button(f"🔄 Re-generate Character {i+1} with Original Image", key=f"regen_char_{i}"):
                 if not st.session_state.character_data[i]["image"]:
                     st.warning("Ensure to have a picture")
                 else:
                     with st.spinner(f"Regenerating image for Character {i+1} using original image..."):
-                        new_char_path = regenerate_character_with_image_nanobanana(
+                        new_char_path,error= regenerate_character_with_image_nanobanana(
                             character_description=f"{char_name}, {char_traits}",
                             original_image_path=st.session_state.character_data[i]["image"],
                             genre=genre,
@@ -180,7 +190,7 @@ with tab1:
                             st.session_state.character_version += 1
                             st.rerun()
                         else:
-                            st.error("Failed to regenerate character image.")
+                            st.error(f"Failed to regenerate image. {error}")
             if st.session_state.character_data[i]["image"]:
                 st.image(st.session_state.character_data[i]["image"], caption=f"{char_name if char_name else 'Generated Character'} Image", width=300)
 
@@ -189,12 +199,17 @@ with tab1:
         st.session_state.generated_characters = []
         st.session_state.num_characters = 0
         st.session_state.character_version += 1
+        st.rerun()
 
     st.divider()
     st.header("3. Generate Illustrations")
     generate = st.button("✨ Generate Images")
 
     if generate:
+        if not api_key:
+            st.warning("Please enter api key.")
+            st.stop()
+
         if not title:
             st.warning("Please enter a story title.")
             st.stop()
@@ -206,7 +221,6 @@ with tab1:
         if st.session_state.character_data:
             st.session_state.character_data = st.session_state.character_data[:num_characters]
             if not all_characters_valid(st.session_state.character_data):
-                print(st.session_state.character_data)
                 st.warning("Please complete ALL character fields (name, traits, and image).")
                 st.stop()
 
@@ -223,8 +237,8 @@ with tab1:
                         )
 
         with st.spinner("🎨 Generating illustrations..."):
-            image_prompts = [page["image_prompt"] for page in st.session_state.story_data["page"]]
-            st.session_state.img_paths = generate_image_nanobanana(image_prompts, characters=st.session_state.character_data,ratio=ratio)
+            image_prompts = [page["image_prompt"] for page in st.session_state.story_data["pages"]]
+            st.session_state.img_paths,st.session_state.generated_image_error = generate_image_nanobanana(image_prompts, characters=st.session_state.character_data,ratio=ratio)
         
         st.success("Images generated! Switch to the 'Read Storybook' tab to view them.")
         st.session_state.character_version += 1
@@ -259,16 +273,16 @@ with tab2:
 
         st.header("📚 Story Output")
         
-        for i, page in enumerate(st.session_state.story_data["page"], start=1):
+        for i, page in enumerate(st.session_state.story_data["pages"], start=1):
             st.subheader(f"Page {i}")
 
             col1, col2 = st.columns([1, 1])
 
             with col1:
-                if i-1 < len(st.session_state.img_paths):
+                if i-1 < len(st.session_state.img_paths) and st.session_state.img_paths[i-1]:
                     st.image(st.session_state.img_paths[i-1], caption=f"Page {i} Illustration", width=400)
                 else:
-                    st.warning("Image not available.")
+                    st.warning(f"Image not available. {st.session_state.generated_image_error[i-1]}")
 
             with col2:
                 st.write(page["text"])
@@ -276,12 +290,12 @@ with tab2:
                 new_prompt = st.text_area(f"Image Prompt for Page {i}", value=page['image_prompt'], key=f"prompt_{i}_{st.session_state.character_version}")
                 
                 if new_prompt != page['image_prompt']:
-                    st.session_state.story_data["page"][i-1]["image_prompt"] = new_prompt
+                    st.session_state.story_data["pages"][i-1]["image_prompt"] = new_prompt
                 
                 if st.button(f"🔄 Re-generate Image {i}", key=f"regen_{i}"):
                     with st.spinner(f"Regenerating image for Page {i}..."):
                         
-                        new_img_path = regenerate_image_nanobanana(
+                        new_img_path,error= regenerate_image_nanobanana(
                             new_prompt, 
                             characters=st.session_state.character_data, 
                             ratio=ratio
@@ -293,14 +307,13 @@ with tab2:
                                 st.session_state.img_paths.append(new_img_path)
                             st.rerun()
                         else:
-                            st.error("Failed to regenerate image.")
+                            st.error(f"Failed to regenerate image. {error}")
 
                 if st.button(f"🔄 Re-generate with Original Image {i}", key=f"regen_img_{i}"):
                     with st.spinner(f"Regenerating image for Page {i} using original image..."):
-                        from utils.image_utils import regenerate_image_with_image_nanobanana
                         
                         current_img_path = st.session_state.img_paths[i-1]
-                        new_img_path = regenerate_image_with_image_nanobanana(
+                        new_img_path,error = regenerate_image_with_image_nanobanana(
                             new_prompt, 
                             original_image_path=current_img_path,
                             characters=st.session_state.character_data, 
@@ -313,6 +326,6 @@ with tab2:
                                 st.session_state.img_paths.append(new_img_path)
                             st.rerun()
                         else:
-                            st.error("Failed to regenerate image.")
+                            st.error(f"Failed to regenerate image. {error}")
     else:
         st.info("Go to the 'Create Story' tab to generate your storybook first!")

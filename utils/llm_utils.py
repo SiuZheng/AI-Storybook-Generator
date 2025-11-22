@@ -1,30 +1,15 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import BaseModel, Field
 from typing import List
+from utils.model_story import Storybook, Story
 
-class Page(BaseModel):
-    text: str = Field(description="the text of the page")
-    image_prompt: str = Field(description="the image prompt for llm")
-
-class Storybook(BaseModel):
-    book_name: str = Field(description="Name of the storybook")
-    page: List[Page]
-
-class Character(BaseModel):
-    name: str = Field(description="Name of the character")
-    trait: str = Field(description="Trait of the character")
-
-class Story(BaseModel):
-    story: str = Field(description="the story of the book")
-    character: List[Character]
-
-
+STORYBOOK_SCHEMA = Storybook.model_json_schema()
+STORY_SCHEMA =Story.model_json_schema()
 def generate_page_prompt(title, genre, tone, art_style,pages,age,characters,story):
     """Generate a short story page and image prompt."""
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     story=story
     structured_llm = llm.with_structured_output(
-        schema=Storybook.model_json_schema(), method="json_schema"
+        schema=STORYBOOK_SCHEMA, method="json_schema"
     )
     character_text = ""
     if characters:
@@ -58,7 +43,7 @@ def generate_page_prompt(title, genre, tone, art_style,pages,age,characters,stor
     Return the result in JSON format:
     {{
       "book_name": "...",
-      "page": [
+      "pages": [
         {{
           "text": "story text here",
           "image_prompt": "image description here"
@@ -69,7 +54,7 @@ def generate_page_prompt(title, genre, tone, art_style,pages,age,characters,stor
     Example:
     {{
     "book_name":"a lost banana",
-    "page":[
+    "pages":[
       {{
         "text":"Once upon a time...",
         "image_prompt":"A watercolor painting of a banana in a forest."
@@ -80,13 +65,12 @@ def generate_page_prompt(title, genre, tone, art_style,pages,age,characters,stor
 
     response = structured_llm.invoke(prompt)
     try:
-        [print("RESPONSE RESPONSE RESPONSE RESPONSE RESPONSE RESPONSE RESPONSE ")]
-        print(response)
+
         return response
     except Exception:
         return  {
             "book_name":"a lost banana",
-            "page":[
+            "pages":[
                 {
                     "text":"Once upon a time...",
                     "image_prompt":"A watercolor painting of a banana in a forest."
@@ -112,7 +96,7 @@ def generate_story_prompt(title, genre, tone, art_style,page,age):
     """
     llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
     structured_llm = llm.with_structured_output(
-        schema=Story.model_json_schema(), method="json_schema"
+        schema=STORY_SCHEMA, method="json_schema"
     )
     prompt = f"""
     Write a {page}-page {genre} story titled '{title}'

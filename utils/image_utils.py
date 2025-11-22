@@ -4,9 +4,32 @@ import uuid
 import os
 import time
 from PIL import Image
+from google.genai.types import (
+    HarmCategory,
+    HarmBlockThreshold,
+    SafetySetting,
+    FinishReason
+)
+safety_settings = [
+    SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold=HarmBlockThreshold.OFF,
+    ),
+    SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold=HarmBlockThreshold.OFF,
+    ),
+    SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold=HarmBlockThreshold.OFF,
+    ),
+    SafetySetting(
+        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold=HarmBlockThreshold.OFF,
+    ),
+]
 
 def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
-    
     """
     image_prompts: list of text prompts for each page
     ratio: image aspect ratio
@@ -18,11 +41,9 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
     os.makedirs(CHAR_DIR, exist_ok=True)
 
     client = genai.Client()
-    for f in client.files.list():
-        client.files.delete(name=f.name)
     inline_requests = []
     characters_uriandmime=[]
-
+    error = []
     for char in characters:
         char_image = char.get("image")
         char_file = client.files.upload(file=char_image)
@@ -56,7 +77,8 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
                     }
                 ],
                 "config": types.GenerateContentConfig(
-                    image_config=types.ImageConfig(aspect_ratio=ratio)
+                    image_config=types.ImageConfig(aspect_ratio=ratio),
+                    safety_settings= safety_settings
                 )
             })
     inline_batch_job = client.batches.create(
@@ -82,15 +104,24 @@ def generate_image_nanobanana(image_prompts,characters=None,ratio="1.1"):
         unique_filename = f"output_{i} {uuid.uuid4().hex}.png"
         output_path = os.path.join("images", unique_filename)
         if inline_response.response:
-            for part in inline_response.response.candidates[0].content.parts:
-                if part.text is not None:
-                    print(part.text)
-                elif part.inline_data is not None:
-                    image = part.as_image()
-                    image.save(output_path)
-                    img_path.append(output_path)
-
-    return (img_path)
+            if getattr(inline_response.response, "prompt_feedback", None) is not None:
+                if inline_response.response.prompt_feedback.block_reason is not None:
+                    print("Response blocked:", inline_response.response.prompt_feedback.block_reason)
+                    img_path.append("")
+                    error.append(inline_response.response.prompt_feedback.block_reason)
+            elif (inline_response.response.candidates[0].finish_reason==FinishReason.STOP):
+                for part in inline_response.response.candidates[0].content.parts:
+                    if part.text is not None:
+                        print(part.text)
+                    elif part.inline_data is not None:
+                        image = part.as_image()
+                        image.save(output_path)
+                        img_path.append(output_path)
+                error.append("")
+            else:
+                img_path.append("")
+                error.append(inline_response.response.candidates[0].finish_reason)
+    return img_path,error
 
 def generate_character_nanobanana(characters,genre,tone,art_style,i,ratio):
     CHAR_DIR = "characters"
@@ -110,17 +141,28 @@ def generate_character_nanobanana(characters,genre,tone,art_style,i,ratio):
             config=types.GenerateContentConfig(
                 image_config=types.ImageConfig(
                     aspect_ratio=ratio,
-                )
+                ),
+                safety_settings= safety_settings
             )
         )
-    for part in response.parts:
-        if part.text is not None:
-            print(part.text)
-        elif part.inline_data is not None:
-            save_path = os.path.join(CHAR_DIR, f"character_{i+1} {uuid.uuid4().hex}.jpg")
-            image = part.as_image()
-            image.save(save_path)
-    return save_path
+    
+    save_path = None
+    error=""
+    if getattr(response, "prompt_feedback", None) is not None:
+        if response.prompt_feedback.block_reason is not None:
+            error = response.prompt_feedback.block_reason
+            return save_path,error
+    if response.parts:
+        for part in response.parts:
+            if part.text is not None:
+                print(part.text)
+            elif part.inline_data is not None:
+                save_path = os.path.join(CHAR_DIR, f"character_{i+1} {uuid.uuid4().hex}.jpg")
+                image = part.as_image()
+                image.save(save_path)
+    else:
+        error= "the model did not return any picture."
+    return save_path,error
 
 def regenerate_image_nanobanana(prompt, characters=None, ratio="1:1"):
     """
@@ -132,7 +174,7 @@ def regenerate_image_nanobanana(prompt, characters=None, ratio="1:1"):
     
     client = genai.Client()
     parts = []
-    
+    error = ""
     if characters:
         desc_text = "Character descriptions to maintain consistency:\n"
         for char in characters:
@@ -159,10 +201,17 @@ def regenerate_image_nanobanana(prompt, characters=None, ratio="1:1"):
         model="gemini-2.5-flash-image",
         contents=parts,
         config=types.GenerateContentConfig(
-            image_config=types.ImageConfig(aspect_ratio=ratio)
+            image_config=types.ImageConfig(aspect_ratio=ratio),
+            safety_settings= safety_settings
         )
     )
     save_path = None
+    
+    if getattr(response, "prompt_feedback", None) is not None:
+        if response.prompt_feedback.block_reason is not None:
+            print("Response blocked:", response.prompt_feedback.block_reason)
+            error=response.prompt_feedback.block_reason
+            return save_path,error
     if response.candidates and response.candidates[0].content.parts:
         for part in response.candidates[0].content.parts:
             if part.inline_data is not None:
@@ -171,8 +220,9 @@ def regenerate_image_nanobanana(prompt, characters=None, ratio="1:1"):
                 image = part.as_image()
                 image.save(save_path)
                 break # Only save the first image found
-    
-    return save_path
+    else:
+        error= "the model did not return any picture."
+    return save_path,error
 
 def regenerate_image_with_image_nanobanana(prompt, original_image_path, characters=None, ratio="1:1"):
     """
@@ -183,7 +233,7 @@ def regenerate_image_with_image_nanobanana(prompt, original_image_path, characte
     
     client = genai.Client()
     parts = []
-    
+    error=""
     if original_image_path and os.path.exists(original_image_path):
         original_file = client.files.upload(file=original_image_path)
         parts.append(types.Part(
@@ -220,11 +270,17 @@ def regenerate_image_with_image_nanobanana(prompt, original_image_path, characte
         model="gemini-2.5-flash-image",
         contents=parts,
         config=types.GenerateContentConfig(
-            image_config=types.ImageConfig(aspect_ratio=ratio)
+            image_config=types.ImageConfig(aspect_ratio=ratio),
+            safety_settings= safety_settings
         )
     )
 
     save_path = None
+    if getattr(response, "prompt_feedback", None) is not None:
+        if response.prompt_feedback.block_reason is not None:
+            print("Response blocked:", response.prompt_feedback.block_reason)
+            error = response.prompt_feedback.block_reason
+            return save_path,error
     if response.candidates and response.candidates[0].content.parts:
         for part in response.candidates[0].content.parts:
             if part.inline_data is not None:
@@ -233,8 +289,9 @@ def regenerate_image_with_image_nanobanana(prompt, original_image_path, characte
                 image = part.as_image()
                 image.save(save_path)
                 break # Only save the first image found
-    
-    return save_path
+    else:
+        error= "the model did not return any picture."
+    return save_path,error
 
 def regenerate_character_with_image_nanobanana(character_description, original_image_path, genre, tone, art_style, ratio="1:1"):
     """
@@ -257,7 +314,7 @@ def regenerate_character_with_image_nanobanana(character_description, original_i
     """
 
     parts = []
-    
+    error=""
     try:
         if os.path.exists(original_image_path):
             image = Image.open(original_image_path)
@@ -276,11 +333,17 @@ def regenerate_character_with_image_nanobanana(character_description, original_i
         model="models/gemini-2.5-flash-image",
         contents=parts,
         config=types.GenerateContentConfig(
-            image_config=types.ImageConfig(aspect_ratio=ratio)
+            image_config=types.ImageConfig(aspect_ratio=ratio),
+            safety_settings= safety_settings
         )
     )
 
     save_path = None
+    if getattr(response, "prompt_feedback", None) is not None:
+        if response.prompt_feedback.block_reason is not None:
+            print("Response blocked:", response.prompt_feedback.block_reason)
+            error = response.prompt_feedback.block_reason
+            return save_path,error
     if response.candidates and response.candidates[0].content.parts:
         for part in response.candidates[0].content.parts:
             if part.inline_data is not None:
@@ -289,5 +352,6 @@ def regenerate_character_with_image_nanobanana(character_description, original_i
                 image = part.as_image()
                 image.save(save_path)
                 break 
-    
-    return save_path
+    else:
+        error= "the model did not return any picture."
+    return save_path,error
